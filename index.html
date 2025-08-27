@@ -1,0 +1,2060 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>EHS Regulatory Compliance Calendar</title>
+    <script src="https://cdnjs.cloudflare.com/ajax/libs/Chart.js/3.9.1/chart.min.js"></script>
+    <script src="https://cdnjs.cloudflare.com/ajax/libs/Sortable/1.15.0/Sortable.min.js"></script>
+    <script src="https://cdnjs.cloudflare.com/ajax/libs/jspdf/2.5.1/jspdf.umd.min.js"></script>
+    <style>
+        * { margin: 0; padding: 0; box-sizing: border-box; }
+        html, body { 
+            height: 100%; 
+            width: 100%; 
+            margin: 0; 
+            padding: 0; 
+            overflow-x: hidden;
+        }
+        body { 
+            font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, sans-serif; 
+            background: #f8fafc; 
+            line-height: 1.6;
+            min-height: 100vh;
+            min-width: 100vw;
+        }
+        .container { 
+            max-width: none; 
+            width: 100%; 
+            height: 100%; 
+            margin: 0; 
+            padding: 15px; 
+            min-height: 100vh;
+        }
+        
+        .header { background: white; padding: 20px; border-radius: 12px; box-shadow: 0 2px 10px rgba(0,0,0,0.1); margin-bottom: 20px; }
+        .header h1 { color: #1a202c; font-size: 2.2rem; margin-bottom: 8px; display: flex; align-items: center; gap: 15px; }
+        .header p { color: #718096; font-size: 1rem; margin-bottom: 15px; }
+        
+        .stats { display: grid; grid-template-columns: repeat(auto-fit, minmax(140px, 1fr)); gap: 12px; margin: 15px 0; }
+        .stat-card { background: linear-gradient(135deg, #667eea 0%, #764ba2 100%); padding: 12px; border-radius: 8px; text-align: center; color: white; position: relative; overflow: hidden; }
+        .stat-card.critical { 
+            background: linear-gradient(135deg, #ff6b6b 0%, #ee5a24 100%); 
+            border: 3px solid #ff9ff3;
+            box-shadow: 0 0 30px rgba(255, 107, 107, 0.6);
+            transform: scale(1.05);
+            animation: priorityGlow 2s ease-in-out infinite alternate;
+        }
+        .stat-card.warning { 
+            background: linear-gradient(135deg, #f6ad55 0%, #ed8936 100%); 
+            animation: warningPulse 3s ease-in-out infinite;
+        }
+        
+        @keyframes priorityGlow {
+            0% { box-shadow: 0 0 20px rgba(255, 107, 107, 0.4); }
+            100% { box-shadow: 0 0 40px rgba(255, 107, 107, 0.8), 0 0 60px rgba(255, 107, 107, 0.4); }
+        }
+        @keyframes warningPulse {
+            0%, 100% { transform: scale(1); }
+            50% { transform: scale(1.02); }
+        }
+        
+        .stat-number { font-size: 1.4rem; font-weight: bold; margin-bottom: 2px; position: relative; z-index: 1; }
+        .stat-label { font-size: 0.75rem; opacity: 0.9; position: relative; z-index: 1; }
+        
+        .controls { display: flex; gap: 12px; margin-bottom: 20px; flex-wrap: wrap; }
+        .input { padding: 10px; border: 2px solid #e2e8f0; border-radius: 8px; font-size: 15px; }
+        .input:focus { outline: none; border-color: #667eea; }
+        .btn { 
+            padding: 10px 16px; 
+            background: #667eea; 
+            color: white; 
+            border: none; 
+            border-radius: 8px; 
+            cursor: pointer; 
+            font-size: 14px;
+        }
+        .btn:hover { background: #5a67d8; }
+        .btn-secondary { background: #a0aec0; }
+        .btn-danger { background: #e53e3e; }
+        
+        .btn-group { display: flex; gap: 8px; margin-bottom: 20px; flex-wrap: wrap; }
+        .btn-toggle { 
+            padding: 8px 16px; 
+            border: 2px solid #667eea; 
+            background: white; 
+            color: #667eea; 
+            border-radius: 8px; 
+            cursor: pointer;
+            font-size: 14px;
+        }
+        .btn-toggle.active { background: #667eea; color: white; }
+        
+        .section { background: white; padding: 20px; border-radius: 12px; box-shadow: 0 2px 10px rgba(0,0,0,0.1); margin-bottom: 20px; }
+        .section h2 { color: #2d3748; margin-bottom: 15px; font-size: 1.3rem; }
+        
+        .calendar-grid { display: grid; grid-template-columns: repeat(7, 1fr); gap: 1px; background: #e2e8f0; border-radius: 8px; overflow: hidden; }
+        .calendar-header { background: #667eea; color: white; padding: 10px; text-align: center; font-weight: 600; font-size: 0.9rem; }
+        .calendar-day { background: white; min-height: 120px; padding: 5px; position: relative; border: 1px solid #f1f5f9; }
+        .calendar-day.other-month { background: #f8fafc; opacity: 0.5; }
+        .calendar-day.today { background: #ebf8ff; border: 2px solid #667eea; }
+        .calendar-day:hover { background: #f7fafc; }
+        
+        .day-number { font-weight: 600; color: #2d3748; margin-bottom: 5px; }
+        .day-events { display: flex; flex-direction: column; gap: 2px; }
+        .event-item { 
+            padding: 2px 4px; 
+            border-radius: 3px; 
+            font-size: 0.7rem; 
+            cursor: pointer;
+            white-space: nowrap;
+            overflow: hidden;
+            text-overflow: ellipsis;
+        }
+        .event-item.training { background: #dbeafe; color: #1e40af; border-left: 3px solid #3b82f6; }
+        .event-item.compliance { background: #fef3c7; color: #92400e; border-left: 3px solid #f59e0b; }
+        .event-item.audit { background: #e0e7ff; color: #3730a3; border-left: 3px solid #6366f1; }
+        .event-item.certification { background: #d1fae5; color: #065f46; border-left: 3px solid #10b981; }
+        .event-item.inspection { background: #fed7d7; color: #991b1b; border-left: 3px solid #ef4444; }
+        .event-item.permit { background: #f3e8ff; color: #581c87; border-left: 3px solid #8b5cf6; }
+        .event-item.waste-pickup { background: #fef2f2; color: #7f1d1d; border-left: 3px solid #dc2626; }
+        .event-item.overdue { background: #fca5a5; color: #7f1d1d; animation: blink 2s infinite; }
+        
+        @keyframes blink {
+            0%, 100% { opacity: 1; }
+            50% { opacity: 0.5; }
+        }
+        
+        .compliance-timeline { display: flex; flex-direction: column; gap: 15px; }
+        .timeline-item { 
+            display: flex; 
+            align-items: center; 
+            gap: 15px; 
+            padding: 15px; 
+            border-radius: 8px; 
+            border-left: 4px solid;
+            cursor: pointer;
+        }
+        .timeline-item.overdue { border-color: #ef4444; background: #fef2f2; }
+        .timeline-item.due-soon { border-color: #f59e0b; background: #fffbeb; }
+        .timeline-item.upcoming { border-color: #3b82f6; background: #eff6ff; }
+        .timeline-item.completed { border-color: #10b981; background: #ecfdf5; }
+        
+        .timeline-date { 
+            min-width: 100px; 
+            font-weight: 600; 
+            color: #374151;
+            font-size: 0.9rem;
+        }
+        .timeline-content { flex: 1; }
+        .timeline-title { font-weight: 600; color: #1f2937; margin-bottom: 5px; }
+        .timeline-desc { color: #6b7280; font-size: 0.9rem; }
+        .timeline-meta { display: flex; gap: 10px; margin-top: 5px; flex-wrap: wrap; }
+        .timeline-tag { 
+            padding: 2px 6px; 
+            border-radius: 10px; 
+            font-size: 0.7rem; 
+            font-weight: 600;
+        }
+        
+        .modal { 
+            display: none; 
+            position: fixed; 
+            top: 0; left: 0; 
+            width: 100%; height: 100%; 
+            background: rgba(0,0,0,0.6); 
+            z-index: 1000;
+            backdrop-filter: blur(4px);
+        }
+        .modal.show { display: flex; align-items: center; justify-content: center; }
+        .modal-content { 
+            background: white; 
+            border-radius: 12px; 
+            padding: 30px; 
+            max-width: 600px; 
+            width: 90%; 
+            max-height: 80vh; 
+            overflow-y: auto;
+        }
+        
+        .form-group { margin-bottom: 20px; }
+        .form-label { display: block; margin-bottom: 8px; font-weight: 600; color: #2d3748; }
+        .form-input { width: 100%; padding: 10px; border: 2px solid #e2e8f0; border-radius: 6px; }
+        .form-input:focus { outline: none; border-color: #667eea; }
+        .textarea { resize: vertical; height: 80px; }
+        .form-row { display: grid; grid-template-columns: 1fr 1fr; gap: 15px; }
+        
+        .filter-bar { display: flex; gap: 10px; margin-bottom: 20px; flex-wrap: wrap; }
+        .filter-chip { 
+            padding: 6px 12px; 
+            border: 1px solid #e2e8f0; 
+            border-radius: 15px; 
+            font-size: 0.8rem; 
+            cursor: pointer; 
+            transition: all 0.2s;
+        }
+        .filter-chip.active { background: #667eea; color: white; border-color: #667eea; }
+        .filter-chip:hover:not(.active) { background: #f7fafc; }
+        
+        .search-results {
+            position: absolute;
+            top: 100%;
+            left: 0;
+            right: 0;
+            background: white;
+            border: 2px solid #667eea;
+            border-radius: 8px;
+            box-shadow: 0 10px 25px rgba(0,0,0,0.15);
+            z-index: 100;
+            max-height: 400px;
+            overflow-y: auto;
+        }
+        
+        .search-result-item {
+            padding: 12px 15px;
+            border-bottom: 1px solid #f1f5f9;
+            cursor: pointer;
+            transition: background 0.2s;
+        }
+        
+        .search-result-item:hover {
+            background: #f8fafc;
+        }
+        
+        .search-result-item:last-child {
+            border-bottom: none;
+        }
+        
+        .search-result-title {
+            font-weight: 600;
+            color: #1f2937;
+            margin-bottom: 4px;
+            font-size: 0.9rem;
+        }
+        
+        .search-result-meta {
+            display: flex;
+            gap: 8px;
+            font-size: 0.75rem;
+            margin-bottom: 4px;
+        }
+        
+        .search-result-tag {
+            padding: 2px 6px;
+            border-radius: 4px;
+            font-weight: 500;
+        }
+        
+        .search-result-desc {
+            color: #6b7280;
+            font-size: 0.8rem;
+            line-height: 1.3;
+        }
+        
+        .search-no-results {
+            padding: 20px;
+            text-align: center;
+            color: #6b7280;
+            font-size: 0.9rem;
+        }
+        
+        .calendar-nav { display: flex; justify-content: space-between; align-items: center; margin-bottom: 20px; }
+        .calendar-title { font-size: 1.5rem; font-weight: 600; color: #1f2937; }
+        .nav-btn { 
+            padding: 8px 12px; 
+            border: 1px solid #d1d5db; 
+            background: white; 
+            border-radius: 6px; 
+            cursor: pointer;
+            color: #374151;
+        }
+        .nav-btn:hover { background: #f9fafb; }
+        
+        .chart-container { height: 300px; margin: 20px 0; }
+        
+        .empty-state {
+            text-align: center;
+            padding: 60px 20px;
+            color: #6b7280;
+        }
+        
+        .empty-state-icon {
+            font-size: 4rem;
+            margin-bottom: 20px;
+            opacity: 0.7;
+        }
+        
+        .empty-state-title {
+            font-size: 1.5rem;
+            font-weight: 600;
+            margin-bottom: 10px;
+            color: #374151;
+        }
+        
+        .empty-state-desc {
+            font-size: 1rem;
+            margin-bottom: 30px;
+            line-height: 1.6;
+        }
+        
+        .empty-state-action {
+            background: #667eea;
+            color: white;
+            padding: 12px 24px;
+            border-radius: 8px;
+            text-decoration: none;
+            display: inline-block;
+            font-weight: 600;
+            transition: background 0.2s;
+        }
+        
+        .empty-state-action:hover {
+            background: #5a67d8;
+        }
+        
+        @media (max-width: 768px) {
+            .container { padding: 10px; }
+            .controls { flex-direction: column; }
+            .calendar-grid { grid-template-columns: repeat(7, 1fr); }
+            .calendar-day { min-height: 80px; }
+            .stats { grid-template-columns: repeat(2, 1fr); gap: 10px; }
+            .form-row { grid-template-columns: 1fr; }
+            .header h1 { font-size: 1.8rem; }
+            .header { padding: 15px; }
+            .section { padding: 15px; }
+        }
+    </style>
+</head>
+<body>
+    <div class="container">
+        <div class="header">
+            <h1>🛡️ EHS Regulatory Compliance Calendar</h1>
+            <p>Environmental, Health & Safety training schedules, compliance deadlines, and regulatory requirements</p>
+            
+            <div class="stats">
+                <div class="stat-card">
+                    <div class="stat-number" id="overdueCount">0</div>
+                    <div class="stat-label">Overdue Items</div>
+                </div>
+                <div class="stat-card">
+                    <div class="stat-number" id="dueSoonCount">0</div>
+                    <div class="stat-label">Due This Month</div>
+                </div>
+                <div class="stat-card">
+                    <div class="stat-number" id="upcomingCount">0</div>
+                    <div class="stat-label">Upcoming (60 days)</div>
+                </div>
+                <div class="stat-card">
+                    <div class="stat-number" id="totalCount">0</div>
+                    <div class="stat-label">Total Items</div>
+                </div>
+            </div>
+
+            <div class="controls">
+                <input type="text" id="newItemInput" class="input" placeholder="Add new compliance item..." style="flex: 1; min-width: 300px;" />
+                <select id="typeSelect" class="input">
+                    <option value="">Select Type</option>
+                    <option value="training">Training</option>
+                    <option value="compliance">Compliance Report</option>
+                    <option value="audit">Audit</option>
+                    <option value="certification">Certification</option>
+                    <option value="inspection">Inspection</option>
+                    <option value="permit">Permit</option>
+                    <option value="waste-pickup">Waste Pickup</option>
+                </select>
+                <button class="btn" onclick="addComplianceItem()">➕ Add Item</button>
+            </div>
+
+            <div class="btn-group">
+                <button class="btn-toggle active" onclick="event.stopPropagation(); setViewMode('calendar')">📅 Calendar</button>
+                <button class="btn-toggle" onclick="event.stopPropagation(); setViewMode('timeline')">📋 Timeline</button>
+                <button class="btn-toggle" onclick="event.stopPropagation(); setViewMode('dashboard')">📊 Dashboard</button>
+                <button class="btn-toggle" onclick="event.stopPropagation(); setViewMode('completed')">✅ Completed</button>
+                <button class="btn btn-secondary" onclick="exportData()">📊 Export</button>
+                <button class="btn btn-secondary" onclick="saveData()">💾 Save</button>
+            </div>
+        </div>
+
+        <div class="section" id="filterSection">
+            <div style="display: flex; gap: 15px; margin-bottom: 20px; flex-wrap: wrap; align-items: center; position: relative;">
+                <div style="flex: 1; min-width: 300px; position: relative;">
+                    <input type="text" id="searchInput" class="input" placeholder="🔍 Search compliance items..." style="width: 100%;" />
+                    <div id="searchResults" class="search-results" style="display: none;">
+                        <!-- Search results will appear here -->
+                    </div>
+                </div>
+                <button class="btn btn-secondary" onclick="clearSearch()" style="padding: 10px 12px;">✕ Clear</button>
+            </div>
+            <div class="filter-bar">
+                <div class="filter-chip active" onclick="toggleFilter('all')">All Items</div>
+                <div class="filter-chip" onclick="toggleFilter('overdue')">Overdue</div>
+                <div class="filter-chip" onclick="toggleFilter('due-soon')">Due This Month</div>
+                <div class="filter-chip" onclick="toggleFilter('training')">Training</div>
+                <div class="filter-chip" onclick="toggleFilter('compliance')">Compliance</div>
+                <div class="filter-chip" onclick="toggleFilter('audit')">Audits</div>
+                <div class="filter-chip" onclick="toggleFilter('certification')">Certifications</div>
+                <div class="filter-chip" onclick="toggleFilter('inspection')">Inspections</div>
+                <div class="filter-chip" onclick="toggleFilter('permit')">Permits</div>
+                <div class="filter-chip" onclick="toggleFilter('waste-pickup')">Waste Pickups</div>
+            </div>
+        </div>
+
+        <div class="section" id="mainContent">
+            <!-- Calendar View -->
+            <div id="calendarView">
+                <div class="calendar-nav">
+                    <button class="nav-btn" onclick="previousMonth()">← Previous</button>
+                    <div class="calendar-title" id="calendarTitle">July 2025</div>
+                    <button class="nav-btn" onclick="nextMonth()">Next →</button>
+                </div>
+                <div class="calendar-grid" id="calendarGrid">
+                    <!-- Calendar will be populated by JavaScript -->
+                </div>
+            </div>
+            
+            <!-- Timeline View -->
+            <div id="timelineView" style="display: none;">
+                <h3 style="margin-bottom: 20px;">📋 Compliance Timeline</h3>
+                <div class="compliance-timeline" id="timelineContainer">
+                    <!-- Timeline will be populated by JavaScript -->
+                </div>
+            </div>
+            
+            <!-- Dashboard View -->
+            <div id="dashboardView" style="display: none;">
+                <h3 style="margin-bottom: 20px;">📊 Compliance Dashboard</h3>
+                <div style="display: grid; grid-template-columns: 1fr 1fr; gap: 30px;">
+                    <div>
+                        <h4 style="margin-bottom: 15px;">Compliance by Type</h4>
+                        <div class="chart-container">
+                            <canvas id="typeChart"></canvas>
+                        </div>
+                    </div>
+                    <div>
+                        <h4 style="margin-bottom: 15px;">Status Distribution</h4>
+                        <div class="chart-container">
+                            <canvas id="statusChart"></canvas>
+                        </div>
+                    </div>
+                </div>
+                <div style="margin-top: 30px;">
+                    <h4 style="margin-bottom: 15px;">Compliance Timeline</h4>
+                    <div class="chart-container">
+                        <canvas id="timelineChart"></canvas>
+                    </div>
+                </div>
+            </div>
+            
+            <!-- Completed View -->
+            <div id="completedView" style="display: none;">
+                <h3 style="margin-bottom: 20px;">✅ Completed Compliance Items</h3>
+                <div class="completed-stats" style="display: grid; grid-template-columns: repeat(auto-fit, minmax(200px, 1fr)); gap: 15px; margin-bottom: 30px;">
+                    <div class="stat-card" style="background: linear-gradient(135deg, #10b981 0%, #059669 100%);">
+                        <div class="stat-number" id="completedTotalCount">0</div>
+                        <div class="stat-label">Completed This Year (2025)</div>
+                    </div>
+                    <div class="stat-card" style="background: linear-gradient(135deg, #3b82f6 0%, #2563eb 100%);">
+                        <div class="stat-number" id="completedThisMonth">0</div>
+                        <div class="stat-label">Completed This Month</div>
+                    </div>
+                    <div class="stat-card" style="background: linear-gradient(135deg, #8b5cf6 0%, #7c3aed 100%);">
+                        <div class="stat-number" id="completedThisYear">0</div>
+                        <div class="stat-label">Current Year Total</div>
+                    </div>
+                </div>
+                
+                <div class="completed-filters" style="margin-bottom: 20px;">
+                    <div class="filter-bar">
+                        <div class="filter-chip active" onclick="filterCompleted('all')">All Completed</div>
+                        <div class="filter-chip" onclick="filterCompleted('training')">Training</div>
+                        <div class="filter-chip" onclick="filterCompleted('compliance')">Compliance</div>
+                        <div class="filter-chip" onclick="filterCompleted('audit')">Audits</div>
+                        <div class="filter-chip" onclick="filterCompleted('certification')">Certifications</div>
+                        <div class="filter-chip" onclick="filterCompleted('inspection')">Inspections</div>
+                        <div class="filter-chip" onclick="filterCompleted('permit')">Permits</div>
+                        <div class="filter-chip" onclick="filterCompleted('waste-pickup')">Waste Pickups</div>
+                    </div>
+                </div>
+                
+                <div style="background: #f0f9ff; border: 1px solid #0ea5e9; border-radius: 8px; padding: 15px; margin-bottom: 20px;">
+                    <div style="display: flex; align-items: center; gap: 10px; margin-bottom: 8px;">
+                        <span style="font-size: 1.2rem;">🔄</span>
+                        <strong style="color: #0369a1;">3-Year Rolling Compliance Plan</strong>
+                    </div>
+                    <p style="color: #0369a1; font-size: 0.9rem; margin: 0;">
+                        Annual items automatically maintain a 3-year forward plan. When you complete an annual task, 
+                        the system extends the plan by adding the next year's placeholder. You'll always have 3 years of visibility!
+                    </p>
+                </div>
+                
+                <div id="completedContainer" class="compliance-timeline">
+                    <!-- Completed items will be populated here -->
+                </div>
+            </div>
+        </div>
+    </div>
+
+    <!-- Add/Edit Modal -->
+    <div class="modal" id="complianceModal">
+        <div class="modal-content">
+            <h3 style="margin-bottom: 20px; font-size: 1.5rem;" id="modalTitle">✏️ Compliance Item</h3>
+            <div class="form-group">
+                <label class="form-label">Item Title</label>
+                <input type="text" class="form-input" id="editTitle" />
+            </div>
+            <div class="form-row">
+                <div class="form-group">
+                    <label class="form-label">Type</label>
+                    <select class="form-input" id="editType">
+                        <option value="training">Training</option>
+                        <option value="compliance">Compliance Report</option>
+                        <option value="audit">Audit</option>
+                        <option value="certification">Certification</option>
+                        <option value="inspection">Inspection</option>
+                        <option value="permit">Permit</option>
+                        <option value="waste-pickup">Waste Pickup</option>
+                    </select>
+                </div>
+                <div class="form-group">
+                    <label class="form-label">Status</label>
+                    <select class="form-input" id="editStatus">
+                        <option value="pending">Pending</option>
+                        <option value="in-progress">In Progress</option>
+                        <option value="completed">Completed</option>
+                        <option value="overdue">Overdue</option>
+                    </select>
+                </div>
+            </div>
+            <div class="form-row">
+                <div class="form-group">
+                    <label class="form-label">Due Date</label>
+                    <input type="date" class="form-input" id="editDueDate" />
+                </div>
+                <div class="form-group">
+                    <label class="form-label">Frequency</label>
+                    <select class="form-input" id="editFrequency">
+                        <option value="once">One-time</option>
+                        <option value="annual">Annual</option>
+                        <option value="quarterly">Quarterly</option>
+                        <option value="monthly">Monthly</option>
+                        <option value="biennial">Biennial</option>
+                    </select>
+                </div>
+            </div>
+            <div class="form-group">
+                <label class="form-label">Responsible Party</label>
+                <input type="text" class="form-input" id="editResponsible" placeholder="Person or department responsible" />
+            </div>
+            <div class="form-group">
+                <label class="form-label">Regulatory Authority</label>
+                <input type="text" class="form-input" id="editAuthority" placeholder="e.g., OSHA, EPA, DOT" />
+            </div>
+            <div class="form-group" id="wasteTypeGroup" style="display: none;">
+                <label class="form-label">Waste Type & Generator Status</label>
+                <select class="form-input" id="editWasteInfo">
+                    <option value="">Select Waste Type</option>
+                    <option value="hazardous-sqg">Hazardous Waste - SQG (180 days max)</option>
+                    <option value="hazardous-satellite">Hazardous Waste - Satellite Accumulation (1 year max)</option>
+                    <option value="universal">Universal Waste (1 year max)</option>
+                </select>
+            </div>
+            <div class="form-group" id="accumulationGroup" style="display: none;">
+                <label class="form-label">Accumulation Start Date</label>
+                <input type="date" class="form-input" id="editAccumulationStart" />
+            </div>
+            <div class="form-group">
+                <label class="form-label">Description</label>
+                <textarea class="form-input textarea" id="editDescription" placeholder="Additional details or requirements..."></textarea>
+            </div>
+            
+            <!-- Waste pickup guidelines -->
+            <div id="wastePickupInfo" style="display: none; background: #fef3c7; border: 1px solid #f59e0b; border-radius: 8px; padding: 15px; margin-bottom: 20px;">
+                <div style="display: flex; align-items: center; gap: 10px; margin-bottom: 8px;">
+                    <span style="font-size: 1.2rem;">⚠️</span>
+                    <strong style="color: #92400e;">Waste Pickup Guidelines</strong>
+                </div>
+                <ul style="margin: 0; padding-left: 20px; color: #92400e; font-size: 0.9rem;">
+                    <li>SQG Hazardous Waste: Must be picked up within 180 days</li>
+                    <li>Satellite Accumulation: Must be moved within 1 year</li>
+                    <li>Universal Waste: Must be removed within 1 year</li>
+                    <li>Due date will be auto-calculated based on accumulation start date</li>
+                </ul>
+            </div>
+            
+            <div style="display: flex; gap: 15px; margin-top: 25px;">
+                <button class="btn" onclick="saveComplianceItem()" style="flex: 1;">💾 Save</button>
+                <button class="btn btn-danger" onclick="deleteCurrentItem()" style="flex: 1;" id="deleteBtn">🗑️ Delete</button>
+                <button class="btn btn-secondary" onclick="closeModal()">❌ Cancel</button>
+            </div>
+        </div>
+    </div>
+
+    <script>
+        // Global Variables
+        let currentViewMode = 'calendar';
+        let editingItemId = null;
+        let currentDate = new Date();
+        let filteredItems = [];
+        let activeFilters = ['all'];
+        let completedFilter = 'all';
+        let searchQuery = '';
+        
+        // Start with empty compliance data - clean slate
+        let complianceItems = [];
+        
+        // Utility Functions
+        function escapeHtml(unsafe) {
+            if (typeof unsafe !== 'string') return unsafe;
+            return unsafe
+                .replace(/&/g, "&amp;")
+                .replace(/</g, "&lt;")
+                .replace(/>/g, "&gt;")
+                .replace(/"/g, "&quot;")
+                .replace(/'/g, "&#039;")
+                .replace(/\//g, "&#x2F;");
+        }
+
+        function sanitizeInput(input) {
+            if (typeof input !== 'string') return input;
+            return input
+                .replace(/<script\b[^<]*(?:(?!<\/script>)<[^<]*)*<\/script>/gi, '')
+                .replace(/javascript:/gi, '')
+                .replace(/on\w+\s*=/gi, '')
+                .trim()
+                .substring(0, 1000);
+        }
+        
+        function formatDate(dateString) {
+            if (!dateString) return 'No date';
+            const date = new Date(dateString);
+            return date.toLocaleDateString('en-US', { 
+                year: 'numeric', 
+                month: 'short', 
+                day: 'numeric' 
+            });
+        }
+        
+        function isOverdue(item) {
+            if (!item.dueDate) return false;
+            const dueDate = new Date(item.dueDate);
+            const today = new Date();
+            today.setHours(0, 0, 0, 0);
+            return dueDate < today && item.status !== 'completed';
+        }
+        
+        function isDueSoon(item) {
+            if (!item.dueDate) return false;
+            const dueDate = new Date(item.dueDate);
+            const today = new Date();
+            const daysUntilDue = Math.ceil((dueDate - today) / (1000 * 60 * 60 * 24));
+            return daysUntilDue <= 30 && daysUntilDue >= 0 && item.status !== 'completed';
+        }
+        
+        function showNotification(message, type = 'info') {
+            const notification = document.createElement('div');
+            notification.className = `notification ${type}`;
+            notification.textContent = message;
+            notification.style.cssText = `
+                position: fixed; top: 20px; right: 20px; padding: 15px 20px; 
+                border-radius: 8px; color: white; z-index: 1001; max-width: 400px;
+                background: ${type === 'success' ? '#68d391' : type === 'error' ? '#fc8181' : type === 'warning' ? '#f6ad55' : '#63b3ed'};
+            `;
+            
+            document.body.appendChild(notification);
+            setTimeout(() => notification.remove(), 3000);
+        }
+        
+        // Statistics Update
+        function updateStats() {
+            const total = complianceItems.length;
+            const overdue = complianceItems.filter(item => isOverdue(item)).length;
+            const dueSoon = complianceItems.filter(item => isDueSoon(item)).length;
+            const upcoming = complianceItems.filter(item => {
+                if (!item.dueDate) return false;
+                const dueDate = new Date(item.dueDate);
+                const today = new Date();
+                const daysUntilDue = Math.ceil((dueDate - today) / (1000 * 60 * 60 * 24));
+                return daysUntilDue <= 60 && daysUntilDue > 30 && item.status !== 'completed';
+            }).length;
+            
+            document.getElementById('totalCount').textContent = total;
+            document.getElementById('overdueCount').textContent = overdue;
+            document.getElementById('dueSoonCount').textContent = dueSoon;
+            document.getElementById('upcomingCount').textContent = upcoming;
+            
+            // Update stat card styling based on counts
+            const overdueCard = document.getElementById('overdueCount').parentElement;
+            const dueSoonCard = document.getElementById('dueSoonCount').parentElement;
+            
+            overdueCard.className = overdue > 0 ? 'stat-card critical' : 'stat-card';
+            dueSoonCard.className = dueSoon > 0 ? 'stat-card warning' : 'stat-card';
+        }
+        
+        // View Management
+        function setViewMode(mode) {
+            currentViewMode = mode;
+            
+            // Update button states
+            document.querySelectorAll('.btn-toggle').forEach(btn => {
+                btn.classList.remove('active');
+                if (btn.textContent.toLowerCase().includes(mode)) {
+                    btn.classList.add('active');
+                }
+            });
+            
+            // Hide all views
+            document.getElementById('calendarView').style.display = 'none';
+            document.getElementById('timelineView').style.display = 'none';
+            document.getElementById('dashboardView').style.display = 'none';
+            document.getElementById('completedView').style.display = 'none';
+            
+            // Show selected view
+            switch(mode) {
+                case 'calendar':
+                    document.getElementById('calendarView').style.display = 'block';
+                    renderCalendar();
+                    break;
+                case 'timeline':
+                    document.getElementById('timelineView').style.display = 'block';
+                    renderTimeline();
+                    break;
+                case 'dashboard':
+                    document.getElementById('dashboardView').style.display = 'block';
+                    renderDashboard();
+                    break;
+                case 'completed':
+                    document.getElementById('completedView').style.display = 'block';
+                    renderCompleted();
+                    break;
+            }
+        }
+        
+        // Calendar Functions
+        function renderCalendar() {
+            const year = currentDate.getFullYear();
+            const month = currentDate.getMonth();
+            
+            document.getElementById('calendarTitle').textContent = 
+                new Date(year, month).toLocaleDateString('en-US', { month: 'long', year: 'numeric' });
+            
+            const firstDay = new Date(year, month, 1);
+            const lastDay = new Date(year, month + 1, 0);
+            const startDate = new Date(firstDay);
+            startDate.setDate(startDate.getDate() - firstDay.getDay());
+            
+            const calendarGrid = document.getElementById('calendarGrid');
+            calendarGrid.innerHTML = `
+                <div class="calendar-header">Sun</div>
+                <div class="calendar-header">Mon</div>
+                <div class="calendar-header">Tue</div>
+                <div class="calendar-header">Wed</div>
+                <div class="calendar-header">Thu</div>
+                <div class="calendar-header">Fri</div>
+                <div class="calendar-header">Sat</div>
+            `;
+            
+            const currentDay = new Date(startDate);
+            for (let i = 0; i < 42; i++) {
+                const dayDiv = document.createElement('div');
+                dayDiv.className = 'calendar-day';
+                
+                if (currentDay.getMonth() !== month) {
+                    dayDiv.classList.add('other-month');
+                }
+                
+                const today = new Date();
+                if (currentDay.toDateString() === today.toDateString()) {
+                    dayDiv.classList.add('today');
+                }
+                
+                const dayEvents = getEventsForDate(currentDay);
+                dayDiv.innerHTML = `
+                    <div class="day-number">${currentDay.getDate()}</div>
+                    <div class="day-events">
+                        ${dayEvents.map(event => `
+                            <div class="event-item ${event.type} ${isOverdue(event) ? 'overdue' : ''}" 
+                                 onclick="editComplianceItem(${event.id})" 
+                                 title="${escapeHtml(event.title)}">
+                                ${escapeHtml(event.title.substring(0, 15))}${event.title.length > 15 ? '...' : ''}
+                            </div>
+                        `).join('')}
+                    </div>
+                `;
+                
+                calendarGrid.appendChild(dayDiv);
+                currentDay.setDate(currentDay.getDate() + 1);
+            }
+            
+            // Show empty state if no items
+            if (complianceItems.length === 0) {
+                showEmptyState('calendar');
+            }
+        }
+        
+        function getEventsForDate(date) {
+            const dateString = date.toISOString().split('T')[0];
+            const itemsToShow = activeFilters.includes('all') ? complianceItems : filteredItems;
+            return itemsToShow.filter(item => item.dueDate === dateString);
+        }
+        
+        function previousMonth() {
+            currentDate.setMonth(currentDate.getMonth() - 1);
+            renderCalendar();
+        }
+        
+        function nextMonth() {
+            currentDate.setMonth(currentDate.getMonth() + 1);
+            renderCalendar();
+        }
+        
+        // Timeline Functions
+        function renderTimeline() {
+            const itemsToShow = activeFilters.includes('all') ? complianceItems : filteredItems;
+            const sortedItems = [...itemsToShow].sort((a, b) => {
+                if (!a.dueDate && !b.dueDate) return 0;
+                if (!a.dueDate) return 1;
+                if (!b.dueDate) return -1;
+                return new Date(a.dueDate) - new Date(b.dueDate);
+            });
+            
+            const container = document.getElementById('timelineContainer');
+            
+            if (sortedItems.length === 0) {
+                showEmptyState('timeline');
+                return;
+            }
+            
+            container.innerHTML = sortedItems.map(item => {
+                const overdue = isOverdue(item);
+                const dueSoon = isDueSoon(item);
+                
+                let itemClass = 'timeline-item';
+                if (item.status === 'completed') itemClass += ' completed';
+                else if (overdue) itemClass += ' overdue';
+                else if (dueSoon) itemClass += ' due-soon';
+                else itemClass += ' upcoming';
+                
+                // Add badges for different types of renewals
+                let renewalBadge = '';
+                if (item.isPlaceholder) {
+                    renewalBadge = `
+                        <span class="timeline-tag" style="background: #e0e7ff; color: #3730a3; font-size: 0.6rem;">
+                            📅 Placeholder ${item.renewalYear || ''}
+                        </span>
+                    `;
+                } else if (item.parentId && !item.isPlaceholder) {
+                    renewalBadge = `
+                        <span class="timeline-tag" style="background: #ddd6fe; color: #5b21b6; font-size: 0.6rem;">
+                            🔄 Auto-renewed ${item.renewalYear || ''}
+                        </span>
+                    `;
+                }
+                
+                return `
+                    <div class="${itemClass}" onclick="editComplianceItem(${item.id})">
+                        <div class="timeline-date">${formatDate(item.dueDate)}</div>
+                        <div class="timeline-content">
+                            <div class="timeline-title">${escapeHtml(item.title)}</div>
+                            <div class="timeline-desc">${escapeHtml(item.description || '')}</div>
+                            <div class="timeline-meta">
+                                <span class="timeline-tag ${item.type}">${item.type}</span>
+                                <span class="timeline-tag status">${item.status}</span>
+                                <span class="timeline-tag">${item.authority || 'N/A'}</span>
+                                <span class="timeline-tag">${item.responsible || 'Unassigned'}</span>
+                                <span class="timeline-tag frequency" style="background: ${item.frequency === 'annual' ? '#fef3c7' : '#f3f4f6'}; color: ${item.frequency === 'annual' ? '#92400e' : '#374151'};">
+                                    ${item.frequency === 'annual' ? '📅 Annual' : item.frequency}
+                                </span>
+                                ${renewalBadge}
+                            </div>
+                        </div>
+                    </div>
+                `;
+            }).join('');
+        }
+        
+        // Dashboard Functions
+        function renderDashboard() {
+            if (complianceItems.length === 0) {
+                showEmptyState('dashboard');
+                return;
+            }
+            
+            renderTypeChart();
+            renderStatusChart();
+            renderTimelineChart();
+        }
+        
+        function renderTypeChart() {
+            const ctx = document.getElementById('typeChart');
+            if (!ctx) return;
+            
+            const itemsToShow = activeFilters.includes('all') ? complianceItems : filteredItems;
+            const typeCounts = {};
+            itemsToShow.forEach(item => {
+                typeCounts[item.type] = (typeCounts[item.type] || 0) + 1;
+            });
+            
+            // Clear any existing chart
+            Chart.getChart(ctx)?.destroy();
+            
+            new Chart(ctx, {
+                type: 'doughnut',
+                data: {
+                    labels: Object.keys(typeCounts),
+                    datasets: [{
+                        data: Object.values(typeCounts),
+                        backgroundColor: ['#3b82f6', '#f59e0b', '#6366f1', '#10b981', '#ef4444', '#8b5cf6', '#dc2626']
+                    }]
+                },
+                options: {
+                    responsive: true,
+                    maintainAspectRatio: false,
+                    plugins: {
+                        legend: { position: 'bottom' }
+                    }
+                }
+            });
+        }
+        
+        function renderStatusChart() {
+            const ctx = document.getElementById('statusChart');
+            if (!ctx) return;
+            
+            const itemsToShow = activeFilters.includes('all') ? complianceItems : filteredItems;
+            const statusCounts = {};
+            itemsToShow.forEach(item => {
+                const status = isOverdue(item) ? 'overdue' : item.status;
+                statusCounts[status] = (statusCounts[status] || 0) + 1;
+            });
+            
+            // Clear any existing chart
+            Chart.getChart(ctx)?.destroy();
+            
+            new Chart(ctx, {
+                type: 'bar',
+                data: {
+                    labels: Object.keys(statusCounts),
+                    datasets: [{
+                        label: 'Count',
+                        data: Object.values(statusCounts),
+                        backgroundColor: ['#ef4444', '#f59e0b', '#3b82f6', '#10b981']
+                    }]
+                },
+                options: {
+                    responsive: true,
+                    maintainAspectRatio: false,
+                    plugins: {
+                        legend: { display: false }
+                    },
+                    scales: {
+                        y: { beginAtZero: true }
+                    }
+                }
+            });
+        }
+        
+        function renderTimelineChart() {
+            const ctx = document.getElementById('timelineChart');
+            if (!ctx) return;
+            
+            const itemsToShow = activeFilters.includes('all') ? complianceItems : filteredItems;
+            const monthlyData = {};
+            itemsToShow.forEach(item => {
+                if (item.dueDate) {
+                    const monthKey = item.dueDate.substring(0, 7); // YYYY-MM
+                    monthlyData[monthKey] = (monthlyData[monthKey] || 0) + 1;
+                }
+            });
+            
+            const sortedMonths = Object.keys(monthlyData).sort();
+            
+            // Clear any existing chart
+            Chart.getChart(ctx)?.destroy();
+            
+            new Chart(ctx, {
+                type: 'line',
+                data: {
+                    labels: sortedMonths.map(month => new Date(month + '-01').toLocaleDateString('en-US', { month: 'short', year: 'numeric' })),
+                    datasets: [{
+                        label: 'Due Items',
+                        data: sortedMonths.map(month => monthlyData[month]),
+                        borderColor: '#667eea',
+                        backgroundColor: 'rgba(102, 126, 234, 0.1)',
+                        fill: true
+                    }]
+                },
+                options: {
+                    responsive: true,
+                    maintainAspectRatio: false,
+                    scales: {
+                        y: { beginAtZero: true }
+                    }
+                }
+            });
+        }
+        
+        // Empty State Function
+        function showEmptyState(viewType) {
+            let container, title, description, actionText;
+            
+            switch(viewType) {
+                case 'calendar':
+                    container = document.getElementById('calendarGrid').parentElement;
+                    title = "No Compliance Items Yet";
+                    description = "Start by adding your first compliance item using the form above. You can track training schedules, regulatory deadlines, audits, and more.";
+                    actionText = "Add Your First Item";
+                    break;
+                case 'timeline':
+                    container = document.getElementById('timelineContainer');
+                    title = "No Items to Display";
+                    description = "Your timeline will show compliance items sorted by due date. Add some items or adjust your filters to see them here.";
+                    actionText = "Add Compliance Item";
+                    break;
+                case 'dashboard':
+                    container = document.getElementById('dashboardView');
+                    title = "Dashboard Coming Soon";
+                    description = "Charts and analytics will appear here once you have compliance items to track. Start by adding some items to see your dashboard come to life.";
+                    actionText = "Add Items to See Charts";
+                    break;
+                default:
+                    return;
+            }
+            
+            container.innerHTML = `
+                <div class="empty-state">
+                    <div class="empty-state-icon">🛡️</div>
+                    <div class="empty-state-title">${title}</div>
+                    <div class="empty-state-desc">${description}</div>
+                    <button class="empty-state-action" onclick="document.getElementById('newItemInput').focus()">
+                        ${actionText}
+                    </button>
+                </div>
+            `;
+        }
+        
+        // Item Management
+        function addComplianceItem() {
+            const input = document.getElementById('newItemInput');
+            const typeSelect = document.getElementById('typeSelect');
+            
+            const title = sanitizeInput(input.value);
+            
+            if (!title || title.length < 1) {
+                showNotification('Please enter a title for the compliance item', 'error');
+                return;
+            }
+            
+            if (title.length > 200) {
+                showNotification('Title too long (max 200 characters)', 'error');
+                return;
+            }
+            
+            // Create new item with basic info
+            const newItem = {
+                id: Date.now() + Math.floor(Math.random() * 1000),
+                title: title,
+                type: typeSelect.value || 'compliance',
+                dueDate: '',
+                status: 'pending',
+                frequency: 'once',
+                responsible: '',
+                authority: '',
+                description: ''
+            };
+            
+            // Add to array
+            complianceItems.push(newItem);
+            
+            // Clear input fields
+            input.value = '';
+            typeSelect.value = '';
+            
+            // Open the edit modal to fill in details
+            editingItemId = newItem.id;
+            openEditModal(newItem);
+            
+            showNotification('New compliance item created - please fill in the details', 'success');
+        }
+        
+        function openEditModal(item) {
+            // Set modal title based on whether it's a new item or existing
+            const isNewItem = !item.dueDate && !item.responsible && !item.authority && !item.description;
+            document.getElementById('modalTitle').textContent = isNewItem ? '➕ New Compliance Item' : '✏️ Edit Compliance Item';
+            
+            // Hide delete button for new items
+            const deleteBtn = document.getElementById('deleteBtn');
+            deleteBtn.style.display = isNewItem ? 'none' : 'block';
+            
+            document.getElementById('editTitle').value = item.title || '';
+            document.getElementById('editType').value = item.type || 'compliance';
+            document.getElementById('editStatus').value = item.status || 'pending';
+            document.getElementById('editDueDate').value = item.dueDate || '';
+            document.getElementById('editFrequency').value = item.frequency || 'once';
+            document.getElementById('editResponsible').value = item.responsible || '';
+            document.getElementById('editAuthority').value = item.authority || '';
+            document.getElementById('editDescription').value = item.description || '';
+            
+            // Safely set waste-specific fields
+            const wasteInfoField = document.getElementById('editWasteInfo');
+            const accumulationField = document.getElementById('editAccumulationStart');
+            
+            if (wasteInfoField) {
+                wasteInfoField.value = item.wasteType || '';
+            }
+            if (accumulationField) {
+                accumulationField.value = item.accumulationStart || '';
+            }
+            
+            // Show/hide waste-specific fields
+            toggleWasteFields(item.type);
+            
+            document.getElementById('complianceModal').classList.add('show');
+            
+            // Focus on the first empty field for new items
+            if (isNewItem) {
+                setTimeout(() => {
+                    if (item.type === 'waste-pickup') {
+                        const wasteField = document.getElementById('editWasteInfo');
+                        if (wasteField) wasteField.focus();
+                    } else {
+                        document.getElementById('editDueDate').focus();
+                    }
+                }, 100);
+            }
+        }
+        
+        function toggleWasteFields(type) {
+            const wasteTypeGroup = document.getElementById('wasteTypeGroup');
+            const accumulationGroup = document.getElementById('accumulationGroup');
+            const wasteInfo = document.getElementById('editWasteInfo');
+            const accumulationStart = document.getElementById('editAccumulationStart');
+            const wasteGuidelines = document.getElementById('wastePickupInfo');
+            
+            if (type === 'waste-pickup') {
+                wasteTypeGroup.style.display = 'block';
+                accumulationGroup.style.display = 'block';
+                wasteGuidelines.style.display = 'block';
+                wasteInfo.required = true;
+                accumulationStart.required = true;
+            } else {
+                wasteTypeGroup.style.display = 'none';
+                accumulationGroup.style.display = 'none';
+                wasteGuidelines.style.display = 'none';
+                wasteInfo.required = false;
+                accumulationStart.required = false;
+            }
+        }
+        
+        function editComplianceItem(id) {
+            const item = complianceItems.find(i => i.id === id);
+            if (!item) return;
+            
+            editingItemId = id;
+            openEditModal(item);
+        }
+        
+        function saveComplianceItem() {
+            if (!editingItemId) return;
+            
+            const item = complianceItems.find(i => i.id === editingItemId);
+            if (!item) return;
+            
+            const previousStatus = item.status;
+            const previousFrequency = item.frequency;
+            const newStatus = document.getElementById('editStatus').value;
+            const newFrequency = document.getElementById('editFrequency').value;
+            const newType = document.getElementById('editType').value;
+            
+            item.title = sanitizeInput(document.getElementById('editTitle').value);
+            item.type = newType;
+            item.status = newStatus;
+            item.dueDate = document.getElementById('editDueDate').value;
+            item.frequency = newFrequency;
+            item.responsible = sanitizeInput(document.getElementById('editResponsible').value);
+            item.authority = sanitizeInput(document.getElementById('editAuthority').value);
+            item.description = sanitizeInput(document.getElementById('editDescription').value);
+            
+            // Handle waste-specific fields
+            if (newType === 'waste-pickup') {
+                const wasteInfoField = document.getElementById('editWasteInfo');
+                const accumulationField = document.getElementById('editAccumulationStart');
+                
+                item.wasteType = wasteInfoField ? wasteInfoField.value : '';
+                item.accumulationStart = accumulationField ? accumulationField.value : '';
+                
+                // Auto-calculate due date based on waste type and accumulation start
+                if (item.wasteType && item.accumulationStart) {
+                    item.dueDate = calculateWastePickupDate(item.wasteType, item.accumulationStart);
+                    const dueDateField = document.getElementById('editDueDate');
+                    if (dueDateField) {
+                        dueDateField.value = item.dueDate;
+                    }
+                }
+                
+                // Validate required waste fields
+                if (!item.wasteType || !item.accumulationStart) {
+                    showNotification('Waste type and accumulation start date are required for waste pickups', 'error');
+                    return;
+                }
+            } else {
+                // Clear waste-specific fields for non-waste items
+                item.wasteType = '';
+                item.accumulationStart = '';
+            }
+            
+            if (!item.title || item.title.length < 1) {
+                showNotification('Title is required', 'error');
+                return;
+            }
+            
+            // Handle creation of annual placeholders for new annual items
+            if (previousFrequency !== 'annual' && newFrequency === 'annual' && item.dueDate) {
+                createAnnualPlaceholders(item);
+            }
+            
+            // Handle completion and rolling plan extension
+            if (previousStatus !== 'completed' && newStatus === 'completed') {
+                item.completedDate = new Date().toISOString().split('T')[0];
+                
+                // For annual items, extend the rolling plan when completed
+                if (item.frequency === 'annual' && item.dueDate) {
+                    extendRollingPlan(item);
+                }
+            }
+            
+            closeModal();
+            updateStats();
+            renderCurrentView();
+            showNotification('Compliance item saved successfully', 'success');
+        }
+        
+        function calculateWastePickupDate(wasteType, accumulationStart) {
+            const startDate = new Date(accumulationStart);
+            let pickupDate = new Date(startDate);
+            
+            switch(wasteType) {
+                case 'hazardous-sqg':
+                    // 180 days for SQG hazardous waste
+                    pickupDate.setDate(startDate.getDate() + 180);
+                    break;
+                case 'hazardous-satellite':
+                case 'universal':
+                    // 1 year for satellite and universal waste
+                    pickupDate.setFullYear(startDate.getFullYear() + 1);
+                    break;
+                default:
+                    // Default to 180 days if type not recognized
+                    pickupDate.setDate(startDate.getDate() + 180);
+            }
+            
+            return pickupDate.toISOString().split('T')[0];
+        }
+        
+        function createAnnualPlaceholders(originalItem) {
+            if (!originalItem.dueDate) return;
+            
+            const baseDueDate = new Date(originalItem.dueDate);
+            const placeholdersCreated = [];
+            
+            // Create placeholders for the next 3 years
+            for (let yearOffset = 1; yearOffset <= 3; yearOffset++) {
+                const nextYearDueDate = new Date(baseDueDate);
+                nextYearDueDate.setFullYear(baseDueDate.getFullYear() + yearOffset);
+                
+                // Check if placeholder already exists to avoid duplicates
+                const existingPlaceholder = complianceItems.find(item => 
+                    (item.parentId === originalItem.id || item.id === originalItem.id) && 
+                    item.dueDate === nextYearDueDate.toISOString().split('T')[0]
+                );
+                
+                if (!existingPlaceholder) {
+                    const placeholderItem = {
+                        id: Date.now() + Math.floor(Math.random() * 1000) + yearOffset,
+                        title: originalItem.title,
+                        type: originalItem.type,
+                        dueDate: nextYearDueDate.toISOString().split('T')[0],
+                        status: 'pending',
+                        frequency: 'annual',
+                        responsible: originalItem.responsible,
+                        authority: originalItem.authority,
+                        description: originalItem.description,
+                        parentId: originalItem.parentId || originalItem.id, // Link to root item
+                        renewalYear: nextYearDueDate.getFullYear(),
+                        isPlaceholder: true
+                    };
+                    
+                    complianceItems.push(placeholderItem);
+                    placeholdersCreated.push(nextYearDueDate.getFullYear());
+                }
+            }
+            
+            if (placeholdersCreated.length > 0) {
+                showNotification(`🗓️ Created annual placeholders for ${placeholdersCreated.join(', ')}`, 'success');
+            }
+        }
+        
+        function extendRollingPlan(completedItem) {
+            if (!completedItem.dueDate || completedItem.frequency !== 'annual') return;
+            
+            // Find the root parent ID (original item that started the chain)
+            const rootParentId = completedItem.parentId || completedItem.id;
+            
+            // Find all items in this annual chain
+            const annualChain = complianceItems.filter(item => 
+                item.id === rootParentId || item.parentId === rootParentId
+            );
+            
+            // Find the latest year in the chain
+            const latestYear = Math.max(...annualChain
+                .filter(item => item.dueDate)
+                .map(item => new Date(item.dueDate).getFullYear())
+            );
+            
+            // Calculate the next year we need to add
+            const nextYearToAdd = latestYear + 1;
+            
+            // Check if we already have an item for that year
+            const hasNextYear = annualChain.some(item => {
+                if (!item.dueDate) return false;
+                return new Date(item.dueDate).getFullYear() === nextYearToAdd;
+            });
+            
+            if (!hasNextYear) {
+                // Create the next year's placeholder to maintain the 3-year rolling plan
+                const baseDueDate = new Date(completedItem.dueDate);
+                const nextYearDueDate = new Date(baseDueDate);
+                nextYearDueDate.setFullYear(nextYearToAdd);
+                
+                const newPlaceholder = {
+                    id: Date.now() + Math.floor(Math.random() * 1000),
+                    title: completedItem.title,
+                    type: completedItem.type,
+                    dueDate: nextYearDueDate.toISOString().split('T')[0],
+                    status: 'pending',
+                    frequency: 'annual',
+                    responsible: completedItem.responsible,
+                    authority: completedItem.authority,
+                    description: completedItem.description,
+                    parentId: rootParentId,
+                    renewalYear: nextYearToAdd,
+                    isPlaceholder: true
+                };
+                
+                complianceItems.push(newPlaceholder);
+                showNotification(`🔄 Rolling plan extended: Added ${nextYearToAdd} placeholder`, 'success');
+            }
+            
+            // Mark completed item as part of the rolling plan
+            if (!completedItem.parentId && completedItem.id !== rootParentId) {
+                completedItem.parentId = rootParentId;
+            }
+        }
+        
+        function deleteCurrentItem() {
+            if (editingItemId && confirm('Are you sure you want to delete this compliance item?')) {
+                complianceItems = complianceItems.filter(i => i.id !== editingItemId);
+                closeModal();
+                updateStats();
+                renderCurrentView();
+                showNotification('Compliance item deleted', 'success');
+            }
+        }
+        
+        function closeModal() {
+            document.getElementById('complianceModal').classList.remove('show');
+            editingItemId = null;
+        }
+        
+        function renderCurrentView() {
+            switch(currentViewMode) {
+                case 'calendar':
+                    renderCalendar();
+                    break;
+                case 'timeline':
+                    renderTimeline();
+                    break;
+                case 'dashboard':
+                    renderDashboard();
+                    break;
+                case 'completed':
+                    renderCompleted();
+                    break;
+            }
+        }
+        
+        // Completed View Functions
+        function renderCompleted() {
+            updateCompletedStats();
+            renderCompletedItems();
+        }
+        
+        function updateCompletedStats() {
+            const currentYear = new Date().getFullYear();
+            
+            // Filter completed items to current year only (Jan 1 - Dec 31)
+            const completedItemsThisYear = complianceItems.filter(item => {
+                if (item.status !== 'completed') return false;
+                if (!item.completedDate) return false;
+                
+                const completedDate = new Date(item.completedDate);
+                return completedDate.getFullYear() === currentYear;
+            });
+            
+            const total = completedItemsThisYear.length;
+            
+            // This month - based on completion date within current year
+            const now = new Date();
+            const thisMonth = completedItemsThisYear.filter(item => {
+                const completedDate = new Date(item.completedDate);
+                return completedDate.getMonth() === now.getMonth();
+            }).length;
+            
+            // This year is the same as total (since we're already filtering by current year)
+            const thisYear = total;
+            
+            document.getElementById('completedTotalCount').textContent = total;
+            document.getElementById('completedThisMonth').textContent = thisMonth;
+            document.getElementById('completedThisYear').textContent = thisYear;
+        }
+        
+        function renderCompletedItems() {
+            const currentYear = new Date().getFullYear();
+            
+            // Filter to completed items from current year only
+            let completedItems = complianceItems.filter(item => {
+                if (item.status !== 'completed') return false;
+                if (!item.completedDate) return false;
+                
+                const completedDate = new Date(item.completedDate);
+                return completedDate.getFullYear() === currentYear;
+            });
+            
+            // Apply search filter to completed items
+            if (searchQuery.trim()) {
+                const query = searchQuery.toLowerCase().trim();
+                completedItems = completedItems.filter(item => {
+                    const title = (item.title || '').toLowerCase();
+                    const description = (item.description || '').toLowerCase();
+                    const responsible = (item.responsible || '').toLowerCase();
+                    const authority = (item.authority || '').toLowerCase();
+                    
+                    return title.includes(query) || 
+                           description.includes(query) || 
+                           responsible.includes(query) || 
+                           authority.includes(query);
+                });
+            }
+            
+            // Apply completed filter
+            if (completedFilter !== 'all') {
+                completedItems = completedItems.filter(item => item.type === completedFilter);
+            }
+            
+            // Sort by completion date (most recent first)
+            completedItems.sort((a, b) => {
+                const aDate = a.completedDate || a.dueDate;
+                const bDate = b.completedDate || b.dueDate;
+                if (!aDate && !bDate) return 0;
+                if (!aDate) return 1;
+                if (!bDate) return -1;
+                return new Date(bDate) - new Date(aDate);
+            });
+            
+            const container = document.getElementById('completedContainer');
+            
+            if (completedItems.length === 0) {
+                const searchMessage = searchQuery.trim() ? ` matching "${searchQuery}"` : '';
+                container.innerHTML = `
+                    <div style="text-align: center; padding: 40px; color: #6b7280;">
+                        <div style="font-size: 2rem; margin-bottom: 10px;">✅</div>
+                        <div style="font-size: 1.1rem; margin-bottom: 5px;">No completed ${completedFilter === 'all' ? 'items' : completedFilter + ' items'}${searchMessage} found for ${currentYear}</div>
+                        <div style="font-size: 0.9rem;">Complete some compliance items this year to see them here</div>
+                    </div>
+                `;
+                return;
+            }
+            
+            container.innerHTML = completedItems.map(item => {
+                const completedDate = new Date(item.completedDate || item.dueDate);
+                const daysSinceCompleted = Math.floor((new Date() - completedDate) / (1000 * 60 * 60 * 24));
+                
+                // Highlight search terms in title and description
+                let title = escapeHtml(item.title);
+                let description = escapeHtml(item.description || '');
+                
+                if (searchQuery.trim()) {
+                    const query = searchQuery.trim();
+                    const regex = new RegExp(`(${query})`, 'gi');
+                    title = title.replace(regex, '<mark style="background: #fef08a;">$1</mark>');
+                    description = description.replace(regex, '<mark style="background: #fef08a;">$1</mark>');
+                }
+                
+                return `
+                    <div class="timeline-item completed" onclick="editComplianceItem(${item.id})">
+                        <div class="timeline-date">
+                            <div style="font-weight: 600;">Completed</div>
+                            <div style="font-size: 0.8rem;">${formatDate(item.completedDate || item.dueDate)}</div>
+                            <div style="font-size: 0.7rem; color: #10b981; margin-top: 2px;">
+                                ${daysSinceCompleted === 0 ? 'Today' : daysSinceCompleted === 1 ? 'Yesterday' : `${daysSinceCompleted} days ago`}
+                            </div>
+                        </div>
+                        <div class="timeline-content">
+                            <div class="timeline-title">
+                                <span style="margin-right: 8px;">✅</span>
+                                ${title}
+                            </div>
+                            <div class="timeline-desc">${description}</div>
+                            <div class="timeline-meta">
+                                <span class="timeline-tag ${item.type}">${item.type}</span>
+                                <span class="timeline-tag" style="background: #dcfce7; color: #166534;">completed ${currentYear}</span>
+                                <span class="timeline-tag">${item.authority || 'N/A'}</span>
+                                <span class="timeline-tag">${item.responsible || 'Unassigned'}</span>
+                                <span class="timeline-tag" style="background: #eff6ff; color: #1d4ed8;">${item.frequency}</span>
+                                ${item.dueDate ? `<span class="timeline-tag" style="background: #fef3c7; color: #92400e;">Due: ${formatDate(item.dueDate)}</span>` : ''}
+                            </div>
+                        </div>
+                    </div>
+                `;
+            }).join('');
+        }
+        
+        function filterCompleted(filterType) {
+            completedFilter = filterType;
+            
+            // Update filter chip visuals
+            document.querySelectorAll('.completed-filters .filter-chip').forEach(chip => {
+                chip.classList.remove('active');
+            });
+            
+            const activeChip = document.querySelector(`.completed-filters .filter-chip[onclick="filterCompleted('${filterType}')"]`);
+            if (activeChip) activeChip.classList.add('active');
+            
+            renderCompletedItems();
+        }
+        
+        // Filter Functions
+        function toggleFilter(filterType) {
+            if (filterType === 'all') {
+                activeFilters = ['all'];
+            } else {
+                if (activeFilters.includes('all')) {
+                    activeFilters = [filterType];
+                } else {
+                    const index = activeFilters.indexOf(filterType);
+                    if (index > -1) {
+                        activeFilters.splice(index, 1);
+                        if (activeFilters.length === 0) activeFilters = ['all'];
+                    } else {
+                        activeFilters.push(filterType);
+                    }
+                }
+            }
+            
+            // Update filter chip visuals
+            document.querySelectorAll('.filter-chip').forEach(chip => {
+                chip.classList.remove('active');
+            });
+            
+            activeFilters.forEach(filter => {
+                const chip = document.querySelector(`.filter-chip[onclick="toggleFilter('${filter}')"]`);
+                if (chip) chip.classList.add('active');
+            });
+            
+            applyFilters();
+        }
+        
+        function getFilteredItems() {
+            let items = complianceItems;
+            
+            // Apply search filter first
+            if (searchQuery.trim()) {
+                const query = searchQuery.toLowerCase().trim();
+                items = items.filter(item => {
+                    const title = (item.title || '').toLowerCase();
+                    const description = (item.description || '').toLowerCase();
+                    const responsible = (item.responsible || '').toLowerCase();
+                    const authority = (item.authority || '').toLowerCase();
+                    
+                    return title.includes(query) || 
+                           description.includes(query) || 
+                           responsible.includes(query) || 
+                           authority.includes(query);
+                });
+            }
+            
+            // Apply category filters
+            if (activeFilters.includes('all')) {
+                return items;
+            }
+            
+            return items.filter(item => {
+                return activeFilters.some(filter => {
+                    switch(filter) {
+                        case 'overdue':
+                            return isOverdue(item);
+                        case 'due-soon':
+                            return isDueSoon(item);
+                        case 'training':
+                        case 'compliance':
+                        case 'audit':
+                        case 'certification':
+                        case 'inspection':
+                        case 'permit':
+                        case 'waste-pickup':
+                            return item.type === filter;
+                        default:
+                            return false;
+                    }
+                });
+            });
+        }
+        
+        function applyFilters() {
+            filteredItems = getFilteredItems();
+            renderCurrentView();
+            
+            // Update stats to show filtered counts
+            const total = filteredItems.length;
+            const overdue = filteredItems.filter(item => isOverdue(item)).length;
+            const dueSoon = filteredItems.filter(item => isDueSoon(item)).length;
+            const upcoming = filteredItems.filter(item => {
+                if (!item.dueDate) return false;
+                const dueDate = new Date(item.dueDate);
+                const today = new Date();
+                const daysUntilDue = Math.ceil((dueDate - today) / (1000 * 60 * 60 * 24));
+                return daysUntilDue <= 60 && daysUntilDue > 30 && item.status !== 'completed';
+            }).length;
+            
+            // Update stat cards with filtered counts
+            document.getElementById('totalCount').textContent = total;
+            document.getElementById('overdueCount').textContent = overdue;
+            document.getElementById('dueSoonCount').textContent = dueSoon;
+            document.getElementById('upcomingCount').textContent = upcoming;
+            
+            // Show notification about filter/search
+            if (searchQuery.trim()) {
+                showNotification(`Found ${total} items matching "${searchQuery}"${!activeFilters.includes('all') ? ' with filters: ' + activeFilters.join(', ') : ''}`, 'info');
+            } else if (!activeFilters.includes('all')) {
+                showNotification(`Showing ${total} items matching filter: ${activeFilters.join(', ')}`, 'info');
+            }
+        }
+        
+        // Search Functions
+        function performSearch() {
+            const input = document.getElementById('searchInput');
+            const query = input.value.trim();
+            searchQuery = query;
+            
+            const resultsContainer = document.getElementById('searchResults');
+            
+            if (!query) {
+                resultsContainer.style.display = 'none';
+                applyFilters();
+                return;
+            }
+            
+            // Find matching items
+            const matchingItems = findMatchingItems(query);
+            
+            // Show search results dropdown
+            renderSearchResults(matchingItems, query);
+            resultsContainer.style.display = 'block';
+            
+            // Also apply filters to current view
+            applyFilters();
+        }
+        
+        function findMatchingItems(query) {
+            const searchTerm = query.toLowerCase();
+            
+            return complianceItems.filter(item => {
+                const title = (item.title || '').toLowerCase();
+                const description = (item.description || '').toLowerCase();
+                const responsible = (item.responsible || '').toLowerCase();
+                const authority = (item.authority || '').toLowerCase();
+                
+                return title.includes(searchTerm) || 
+                       description.includes(searchTerm) || 
+                       responsible.includes(searchTerm) || 
+                       authority.includes(searchTerm);
+            });
+        }
+        
+        function renderSearchResults(items, query) {
+            const container = document.getElementById('searchResults');
+            
+            if (items.length === 0) {
+                container.innerHTML = `
+                    <div class="search-no-results">
+                        <div>🔍 No items found matching "${query}"</div>
+                        <div style="font-size: 0.8rem; margin-top: 4px;">Try different keywords or check spelling</div>
+                    </div>
+                `;
+                return;
+            }
+            
+            // Limit to top 8 results for performance
+            const displayItems = items.slice(0, 8);
+            
+            container.innerHTML = displayItems.map(item => {
+                // Highlight search terms
+                let title = escapeHtml(item.title);
+                let description = escapeHtml(item.description || '');
+                
+                const regex = new RegExp(`(${query})`, 'gi');
+                title = title.replace(regex, '<mark style="background: #fef08a; padding: 1px 2px; border-radius: 2px;">$1</mark>');
+                description = description.replace(regex, '<mark style="background: #fef08a; padding: 1px 2px; border-radius: 2px;">$1</mark>');
+                
+                // Truncate description
+                if (description.length > 100) {
+                    description = description.substring(0, 100) + '...';
+                }
+                
+                // Status styling
+                const statusClass = isOverdue(item) ? 'overdue' : 
+                                   item.status === 'completed' ? 'completed' : 
+                                   isDueSoon(item) ? 'due-soon' : 'upcoming';
+                
+                const statusColor = statusClass === 'overdue' ? '#ef4444' :
+                                   statusClass === 'completed' ? '#10b981' :
+                                   statusClass === 'due-soon' ? '#f59e0b' : '#3b82f6';
+                
+                return `
+                    <div class="search-result-item" onclick="jumpToItem(${item.id})">
+                        <div class="search-result-title">${title}</div>
+                        <div class="search-result-meta">
+                            <span class="search-result-tag ${item.type}" style="background: #f3f4f6; color: #374151;">${item.type}</span>
+                            <span class="search-result-tag" style="background: ${statusColor}20; color: ${statusColor};">${item.status}</span>
+                            <span class="search-result-tag" style="background: #f3f4f6; color: #374151;">${formatDate(item.dueDate)}</span>
+                            ${item.responsible ? `<span class="search-result-tag" style="background: #f3f4f6; color: #374151;">${item.responsible}</span>` : ''}
+                        </div>
+                        ${description ? `<div class="search-result-desc">${description}</div>` : ''}
+                    </div>
+                `;
+            }).join('');
+            
+            // Add "show more" if there are more results
+            if (items.length > 8) {
+                container.innerHTML += `
+                    <div style="padding: 12px 15px; text-align: center; background: #f8fafc; color: #6b7280; font-size: 0.8rem; border-top: 1px solid #f1f5f9;">
+                        Showing 8 of ${items.length} results. Keep typing to narrow down.
+                    </div>
+                `;
+            }
+        }
+        
+        function jumpToItem(itemId) {
+            const item = complianceItems.find(i => i.id === itemId);
+            if (!item) return;
+            
+            // Hide search results
+            document.getElementById('searchResults').style.display = 'none';
+            
+            // Clear search and filters
+            clearSearch();
+            
+            // Jump to the item based on current view
+            switch(currentViewMode) {
+                case 'calendar':
+                    jumpToItemInCalendar(item);
+                    break;
+                case 'timeline':
+                    jumpToItemInTimeline(item);
+                    break;
+                case 'completed':
+                    if (item.status === 'completed') {
+                        setViewMode('completed');
+                        setTimeout(() => editComplianceItem(itemId), 100);
+                    } else {
+                        setViewMode('timeline');
+                        setTimeout(() => jumpToItemInTimeline(item), 100);
+                    }
+                    break;
+                default:
+                    jumpToItemInTimeline(item);
+            }
+        }
+        
+        function jumpToItemInCalendar(item) {
+            if (!item.dueDate) {
+                showNotification('Item has no due date - switching to timeline view', 'info');
+                setViewMode('timeline');
+                setTimeout(() => editComplianceItem(item.id), 100);
+                return;
+            }
+            
+            // Navigate to the correct month
+            const itemDate = new Date(item.dueDate);
+            currentDate = new Date(itemDate.getFullYear(), itemDate.getMonth(), 1);
+            
+            // Switch to calendar view and render
+            setViewMode('calendar');
+            renderCalendar();
+            
+            // Highlight the item briefly
+            setTimeout(() => {
+                const dateString = item.dueDate;
+                const dayElements = document.querySelectorAll('.calendar-day');
+                dayElements.forEach(dayEl => {
+                    const events = dayEl.querySelectorAll('.event-item');
+                    events.forEach(eventEl => {
+                        if (eventEl.textContent.includes(item.title.substring(0, 15))) {
+                            eventEl.style.animation = 'blink 1s ease-in-out 3';
+                            setTimeout(() => eventEl.style.animation = '', 3000);
+                        }
+                    });
+                });
+            }, 100);
+            
+            showNotification(`Jumped to ${formatDate(item.dueDate)} - "${item.title}"`, 'success');
+        }
+        
+        function jumpToItemInTimeline(item) {
+            setViewMode('timeline');
+            renderTimeline();
+            
+            // Scroll to and highlight the item
+            setTimeout(() => {
+                const timelineItems = document.querySelectorAll('.timeline-item');
+                timelineItems.forEach(timelineEl => {
+                    if (timelineEl.onclick && timelineEl.onclick.toString().includes(item.id)) {
+                        timelineEl.scrollIntoView({ behavior: 'smooth', block: 'center' });
+                        timelineEl.style.animation = 'priorityGlow 1s ease-in-out 3';
+                        setTimeout(() => timelineEl.style.animation = '', 3000);
+                    }
+                });
+            }, 100);
+            
+            showNotification(`Found "${item.title}" in timeline`, 'success');
+        }
+        
+        function clearSearch() {
+            const input = document.getElementById('searchInput');
+            const resultsContainer = document.getElementById('searchResults');
+            
+            input.value = '';
+            searchQuery = '';
+            resultsContainer.style.display = 'none';
+            applyFilters();
+        }
+        
+        // Data Export/Save
+        function exportData() {
+            try {
+                // Create new jsPDF instance
+                const { jsPDF } = window.jspdf;
+                const doc = new jsPDF();
+                
+                // Get current date for report
+                const reportDate = new Date().toLocaleDateString('en-US', { 
+                    year: 'numeric', 
+                    month: 'long', 
+                    day: 'numeric' 
+                });
+                
+                // Title and header
+                doc.setFontSize(20);
+                doc.setTextColor(102, 126, 234);
+                doc.text('EHS Regulatory Compliance Report', 105, 20, { align: 'center' });
+                
+                doc.setFontSize(12);
+                doc.setTextColor(113, 128, 150);
+                doc.text(`Generated on ${reportDate}`, 105, 30, { align: 'center' });
+                
+                if (complianceItems.length === 0) {
+                    doc.setFontSize(14);
+                    doc.setTextColor(31, 41, 55);
+                    doc.text('No compliance items to export', 105, 60, { align: 'center' });
+                    doc.text('Start by adding compliance items to track your EHS requirements', 105, 80, { align: 'center' });
+                } else {
+                    // Stats summary
+                    doc.setFontSize(14);
+                    doc.setTextColor(31, 41, 55);
+                    doc.text('Compliance Summary', 20, 50);
+                    
+                    // Calculate stats
+                    const total = complianceItems.length;
+                    const overdue = complianceItems.filter(item => isOverdue(item)).length;
+                    const dueSoon = complianceItems.filter(item => isDueSoon(item)).length;
+                    const completed = complianceItems.filter(item => item.status === 'completed').length;
+                    const pending = complianceItems.filter(item => item.status === 'pending').length;
+                    
+                    doc.setFontSize(11);
+                    doc.setTextColor(75, 85, 99);
+                    let yPos = 60;
+                    doc.text(`• Total Compliance Items: ${total}`, 25, yPos);
+                    yPos += 7;
+                    doc.text(`• Overdue Items: ${overdue}`, 25, yPos);
+                    yPos += 7;
+                    doc.text(`• Due This Month: ${dueSoon}`, 25, yPos);
+                    yPos += 7;
+                    doc.text(`• Completed Items: ${completed}`, 25, yPos);
+                    yPos += 7;
+                    doc.text(`• Pending Items: ${pending}`, 25, yPos);
+                    
+                    // Add detailed items if any exist
+                    if (total > 0) {
+                        yPos += 15;
+                        doc.setFontSize(14);
+                        doc.setTextColor(31, 41, 55);
+                        doc.text('All Compliance Items', 20, yPos);
+                        yPos += 10;
+                        
+                        const sortedItems = [...complianceItems].sort((a, b) => {
+                            if (!a.dueDate && !b.dueDate) return 0;
+                            if (!a.dueDate) return 1;
+                            if (!b.dueDate) return -1;
+                            return new Date(a.dueDate) - new Date(b.dueDate);
+                        });
+                        
+                        doc.setFontSize(9);
+                        sortedItems.forEach((item, index) => {
+                            if (yPos > 270) {
+                                doc.addPage();
+                                yPos = 20;
+                            }
+                            
+                            doc.setTextColor(31, 41, 55);
+                            doc.setFont(undefined, 'bold');
+                            doc.text(`${index + 1}. ${item.title}`, 20, yPos);
+                            doc.setFont(undefined, 'normal');
+                            yPos += 6;
+                            
+                            doc.setTextColor(107, 114, 128);
+                            doc.text(`Type: ${item.type} | Status: ${item.status} | Due: ${formatDate(item.dueDate)}`, 25, yPos);
+                            yPos += 5;
+                            if (item.responsible) {
+                                doc.text(`Responsible: ${item.responsible}`, 25, yPos);
+                                yPos += 5;
+                            }
+                            yPos += 3;
+                        });
+                    }
+                }
+                
+                // Save the PDF
+                const filename = `EHS-Compliance-Report-${new Date().toISOString().split('T')[0]}.pdf`;
+                doc.save(filename);
+                
+                showNotification('📄 PDF report generated successfully!', 'success');
+                
+            } catch (error) {
+                console.error('PDF generation error:', error);
+                showNotification('⚠️ PDF export requires jsPDF library. Works in CodePen!', 'warning');
+                
+                // Fallback to JSON export
+                const data = {
+                    complianceItems: complianceItems,
+                    exportDate: new Date().toISOString(),
+                    version: '1.0'
+                };
+                
+                const jsonString = JSON.stringify(data, null, 2);
+                
+                // Try to copy to clipboard
+                if (navigator.clipboard && navigator.clipboard.writeText) {
+                    navigator.clipboard.writeText(jsonString).then(() => {
+                        showNotification('📋 Data copied to clipboard as JSON fallback', 'info');
+                    });
+                }
+            }
+        }
+        
+        function saveData() {
+            showNotification('✅ Ready to track your compliance items!', 'success');
+        }
+        
+        function loadData() {
+            try {
+                showNotification('🛡️ EHS Calendar ready - start adding compliance items!', 'info');
+            } catch (error) {
+                console.error('Error loading data:', error);
+            }
+        }
+        
+        // Event Listeners
+        document.getElementById('newItemInput').addEventListener('keypress', function(e) {
+            if (e.key === 'Enter') {
+                addComplianceItem();
+            }
+        });
+        
+        document.getElementById('searchInput').addEventListener('input', function(e) {
+            performSearch();
+        });
+        
+        document.getElementById('searchInput').addEventListener('keypress', function(e) {
+            if (e.key === 'Enter') {
+                performSearch();
+            }
+        });
+        
+        // Show/hide waste fields when type changes
+        document.getElementById('editType').addEventListener('change', function(e) {
+            toggleWasteFields(e.target.value);
+        });
+        
+        // Auto-calculate pickup date when waste info changes
+        document.getElementById('editWasteInfo').addEventListener('change', function(e) {
+            const accumulationField = document.getElementById('editAccumulationStart');
+            if (accumulationField && accumulationField.value && e.target.value) {
+                const calculatedDate = calculateWastePickupDate(e.target.value, accumulationField.value);
+                const dueDateField = document.getElementById('editDueDate');
+                if (dueDateField) {
+                    dueDateField.value = calculatedDate;
+                }
+            }
+        });
+        
+        document.getElementById('editAccumulationStart').addEventListener('change', function(e) {
+            const wasteTypeField = document.getElementById('editWasteInfo');
+            if (wasteTypeField && wasteTypeField.value && e.target.value) {
+                const calculatedDate = calculateWastePickupDate(wasteTypeField.value, e.target.value);
+                const dueDateField = document.getElementById('editDueDate');
+                if (dueDateField) {
+                    dueDateField.value = calculatedDate;
+                }
+            }
+        });
+        
+        // Hide search results when clicking outside
+        document.addEventListener('click', function(e) {
+            const searchContainer = e.target.closest('#searchInput, #searchResults');
+            if (!searchContainer) {
+                document.getElementById('searchResults').style.display = 'none';
+            }
+        });
+        
+        document.getElementById('complianceModal').addEventListener('click', function(e) {
+            if (e.target === this) {
+                closeModal();
+            }
+        });
+        
+        // Initialize
+        document.addEventListener('DOMContentLoaded', function() {
+            loadData();
+            filteredItems = complianceItems;
+            updateStats();
+            setViewMode('calendar'); // Explicitly set calendar view on load
+        });
+        
+        // Make functions globally accessible
+        window.setViewMode = setViewMode;
+        window.addComplianceItem = addComplianceItem;
+        window.editComplianceItem = editComplianceItem;
+        window.saveComplianceItem = saveComplianceItem;
+        window.deleteCurrentItem = deleteCurrentItem;
+        window.closeModal = closeModal;
+        window.toggleFilter = toggleFilter;
+        window.filterCompleted = filterCompleted;
+        window.performSearch = performSearch;
+        window.clearSearch = clearSearch;
+        window.jumpToItem = jumpToItem;
+        window.previousMonth = previousMonth;
+        window.nextMonth = nextMonth;
+        window.exportData = exportData;
+        window.saveData = saveData;
+    </script>
+</body>
+</html>
